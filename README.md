@@ -10,14 +10,13 @@ R code and data for the paper *"We're only in it for the information: A framewor
 
 ## Overview
 
-This project advocates for a shift in soil microbiome sampling from static spatial coverage to a dynamic philosophy of 'information discovery.' We propose a Bayesian Adaptive Sampling (BAS) framework that reframes sampling as a sequential decision-making process. By using probabilistic spatial models, BAS identifies the next optimal sampling locations to maximize scientific return while minimizing effort.
+This project advocates for a shift in soil microbiome sampling from static spatial coverage to a dynamic philosophy of 'information discovery.' I propose a Bayesian Adaptive Sampling (BAS) framework that reframes sampling as a sequential decision-making process. By using probabilistic spatial models, BAS identifies the next optimal sampling locations to maximize scientific return while minimizing effort.
 
 The framework compares three strategies for accumulating microbial richness across sampling iterations:
 
 | Strategy | Description |
 |---|---|
-| **BAS (+Env) / BAS (Balanced)** | Adaptive sampling using environmental covariates (pH, climate, SOC) + spatial coordinates |
-| **BAS (-Env)** | Adaptive sampling using spatial coordinates only |
+| **BAS** | Adaptive sampling using environmental covariates + spatial coordinates |
 | **Random selection** | Random (non-adaptive) baseline |
 
 Each iteration selects the next batch of sites by optimizing a weighted acquisition function combining predicted richness, predicted local contribution to beta diversity (LCBD), and model uncertainty.
