@@ -1,49 +1,46 @@
-# History files
+# --- large / regenerable objects (see README "Data") ---
+analysis/K_GlobalFungi.rds
+analysis/_worker_data.rds
+analysis/supplementary_GP/_worker_data.rds
+analysis/output/*
+!analysis/output/.gitkeep
+
+# --- script outputs written into analysis/ (canonical copies live in figures/) ---
+analysis/*.png
+analysis/*.pdf
+analysis/*.gif
+
+# --- internal notes ---
+MANIFEST.md
+
+# --- R / RStudio ---
 .Rhistory
 .Rapp.history
-
-# Session Data files
 .RData
 .RDataTmp
-
-# User-specific files
 .Ruserdata
-
-# Example code in package build process
-*-Ex.R
-
-# Output files from R CMD build
-/*.tar.gz
-
-# Output files from R CMD check
-/*.Rcheck/
-
-# RStudio files
 .Rproj.user/
-
-# produced vignettes
-vignettes/*.html
-vignettes/*.pdf
-
-# OAuth2 token, see https://github.com/hadley/httr/releases/tag/v0.3
+*.Rproj
+.Renviron
 .httr-oauth
-
-# knitr and R markdown default cache directories
 *_cache/
 /cache/
-
-# Temporary files created by R markdown
 *.utf8.md
 *.knit.md
-
-# R Environment Variables
-.Renviron
-
-# pkgdown site
 docs/
-
-# translation temp files
-po/*~
-
-# RStudio Connect folder
 rsconnect/
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+desktop.ini
+.claude/
+
+# --- not for public release ---
+manuscript/
+figures/_superseded/
+
+# --- GlobalFungi raw-count subset and full metadata: not redistributed (see README "Data") ---
+analysis/community_5000_soc_res2.5.rds
+analysis/metadata_5000_soc_res2.5.rds
+analysis/master_data_GlobalFungi_full.rds
