@@ -21,6 +21,8 @@ library(adespatial)
 library(sp)
 library(sf)
 library(patchwork)
+library(Matrix)
+source("bas_core.R")     # shared engine (v3: regression kriging / QRF, novelty uniqueness)
 
 set.seed(42)
 
@@ -104,88 +106,22 @@ shp_contour  <- sf::st_read("contour1.shp",    quiet = TRUE) |>
   sf::st_set_crs(6677)  |> sf::st_transform(4326) |>
   sf::st_intersection(shp_boundary)   # clip to study-area boundary
 
-# --- BAS trajectory for Fig2 --------------------------------------------------
-# Snapshot points and batch size (same hyper-parameters as Fig2 simulation)
+# --- BAS trajectory for Fig2 (same hyper-parameters as 01) ----------------------
 BATCH_F2       <- 5
 N_INIT_F2      <- 5
 SNAPSHOTS_F2   <- seq(N_INIT_F2, 30, by = BATCH_F2)  # every batch: 5,10,15,20,25,30
 PANEL_STEPS_F2 <- c(5, 10, 20, 30)                    # milestone steps for static plot
-WR <- WU <- WUNC <- 1 / 3
+W_F2 <- as.numeric(strsplit(Sys.getenv("BAS_WEIGHTS_LOCAL", "0.4,0.3,0.3"), ",")[[1]])   # same weights as 01
 
 set.seed(42)
 init_idx_f2 <- sample(seq_len(N_F2), N_INIT_F2)
+rnd_f2      <- sample(setdiff(seq_len(N_F2), init_idx_f2))
 
-current_sam <- init_idx_f2
-current_uns <- setdiff(seq_len(N_F2), current_sam)
-
-traj_f2 <- vector("list", length(SNAPSHOTS_F2))
-traj_f2[[1]] <- list(n = SNAPSHOTS_F2[1], sampled = current_sam, new = current_sam)
-
-snap_idx <- 2L
-n_total  <- N_INIT_F2
-prev_sam <- current_sam   # track what was sampled at the previous snapshot
-
-while (snap_idx <= length(SNAPSHOTS_F2) && length(current_uns) >= BATCH_F2) {
-
-  # --- Compute LCBD on current samples ---
-  curr_comm <- comm_pa_f2[current_sam, , drop = FALSE]
-  curr_lcbd <- tryCatch({
-    if (nrow(curr_comm) < 3) rep(0, nrow(curr_comm))
-    else {
-      adespatial::beta.div(
-        vegan::decostand(curr_comm, "hellinger"),
-        method = "hellinger", nperm = 0)$LCBD
-    }
-  }, error = function(e) rep(0, length(current_sam)))
-
-  # --- gstat IDW predictions (same as Fig2 simulation) ---
-  train_sp        <- master_f2[current_sam, ]
-  train_sp$LCBD   <- curr_lcbd
-  coordinates(train_sp) <- ~X + Y
-
-  cand_sp <- master_f2[current_uns, ]
-  coordinates(cand_sp) <- ~X + Y
-
-  g_r <- try(gstat(formula = TrueRichness ~ pH + WC,
-                   locations = train_sp, nmax = 10, set = list(idp = .5)),
-             silent = TRUE)
-  g_l <- try(gstat(formula = LCBD ~ pH + WC,
-                   locations = train_sp, nmax = 10, set = list(idp = .5)),
-             silent = TRUE)
-
-  best_local <- NULL
-  if (!inherits(g_r, "try-error") && !inherits(g_l, "try-error")) {
-    pr <- try(suppressMessages(predict(g_r, newdata = cand_sp, debug.level = -1)), silent = TRUE)
-    pl <- try(suppressMessages(predict(g_l, newdata = cand_sp, debug.level = -1)), silent = TRUE)
-
-    if (!inherits(pr, "try-error") && !inherits(pl, "try-error")) {
-      var_r <- pmax(0, if ("var1.var" %in% names(pr)) pr$var1.var else rep(0, nrow(cand_sp@data)))
-      sc    <- WR   * normalize01(pr$var1.pred) +
-               WU   * normalize01(pl$var1.pred) +
-               WUNC * normalize01(sqrt(var_r))
-      best_local <- order(sc, decreasing = TRUE)[seq_len(BATCH_F2)]
-    }
-  }
-  if (is.null(best_local))
-    best_local <- sample(seq_along(current_uns), BATCH_F2)
-
-  new_global  <- current_uns[best_local]
-  current_sam <- c(current_sam, new_global)
-  current_uns <- current_uns[-best_local]
-  n_total     <- n_total + BATCH_F2
-
-  # Record snapshot if we've hit the next target
-  if (n_total == SNAPSHOTS_F2[snap_idx]) {
-    new_at_snap <- setdiff(current_sam, prev_sam)
-    traj_f2[[snap_idx]] <- list(
-      n       = n_total,
-      sampled = current_sam,
-      new     = new_at_snap
-    )
-    prev_sam <- current_sam
-    snap_idx <- snap_idx + 1L
-  }
-}
+# run one BAS campaign with the shared engine (bas_core.R) and record every batch
+traj_f2 <- list(); prev_f2 <- integer(0)
+rec_f2  <- function(S, b) { traj_f2[[b + 1L]] <<- list(n = length(S), sampled = S, new = setdiff(S, prev_f2)); prev_f2 <<- S }
+invisible(run_campaign("BAS", master_f2, comm_pa_f2, init_idx_f2, rnd_f2, batch = BATCH_F2,
+                       n_batches = (max(SNAPSHOTS_F2) - N_INIT_F2) / BATCH_F2, engine = "rk", w = W_F2, record = rec_f2))
 
 panel_idx_f2        <- which(SNAPSHOTS_F2 %in% PANEL_STEPS_F2)
 step_labels_f2      <- paste0("n = ", SNAPSHOTS_F2[panel_idx_f2])  # static 4-panel
@@ -288,7 +224,7 @@ if (requireNamespace("gganimate", quietly = TRUE) &&
     coord_sf(crs = 4326) +
     labs(
       title    = "BAS Spatial Trajectory  \u2014  {current_frame}",
-      subtitle = "Model selects sites with high predicted richness, high beta-diversity, and high uncertainty",
+      subtitle = "Model selects sites with high predicted richness, novelty, and uncertainty",
       x = "Longitude (\u00b0E)", y = "Latitude (\u00b0N)"
     ) +
     theme_minimal(base_size = 13) +
@@ -346,80 +282,19 @@ if (!all(file.exists(rds_needed))) {
   N_INIT_F3      <- 1000
   SNAPSHOTS_F3   <- seq(N_INIT_F3, 3000, by = BATCH_F3_SIZE)  # every batch: 1000,1100,...,3000
   PANEL_STEPS_F3 <- c(1000, 1500, 2000, 3000)                  # milestone steps for static plot
-  WR3 <- 0.25; WU3 <- 0.25; WUNC3 <- 0.50   # same weights as Fig3 simulation
-
-  norm01 <- function(x) {
-    if (!any(!is.na(x))) return(rep(0, length(x)))
-    rng <- range(x, na.rm = TRUE)
-    if (diff(rng) == 0) return(rep(0, length(x)))
-    out <- (x - rng[1]) / diff(rng)
-    out[is.na(out)] <- 0
-    out
-  }
+  W_F3 <- as.numeric(strsplit(Sys.getenv("BAS_WEIGHTS_GLOBAL", "0.2,0.4,0.4"), ",")[[1]])   # same weights as 03
 
   set.seed(42)
   prob_w    <- ifelse(master_f3$latitude > 20, 1.0, 0.05)
   init_f3   <- sample(seq_len(N_F3), N_INIT_F3, prob = prob_w)
-
-  curr_sam_f3 <- init_f3
-  curr_uns_f3 <- setdiff(seq_len(N_F3), init_f3)
-
-  traj_f3       <- vector("list", length(SNAPSHOTS_F3))
-  init_r_f3     <- sum(colSums(comm_pa_f3[init_f3, , drop = FALSE]) > 0)
-  traj_f3[[1]]  <- list(n = SNAPSHOTS_F3[1], sampled = curr_sam_f3, new = curr_sam_f3)
-
-  snap_f3  <- 2L
-  n_tot_f3 <- N_INIT_F3
-  prev_f3  <- curr_sam_f3
+  rnd_f3    <- sample(setdiff(seq_len(N_F3), init_f3))
 
   message("Running BAS trajectory for Fig3 (this may take several minutes)...")
-
-  while (snap_f3 <= length(SNAPSHOTS_F3) && length(curr_uns_f3) >= BATCH_F3_SIZE) {
-
-    # Approximate LCBD via centroid distance in Hellinger space
-    ch     <- comm_hel_f3[curr_sam_f3, , drop = FALSE]
-    cen    <- colMeans(ch)
-    cent   <- sweep(ch, 2, cen, "-")
-    ss_tot <- sum(rowSums(cent^2))
-    lcbd   <- if (ss_tot > 0) rowSums(cent^2) / ss_tot else rep(0, length(curr_sam_f3))
-
-    train_d       <- master_f3[curr_sam_f3, ]
-    train_d$LCBD  <- lcbd
-    cand_d        <- master_f3[curr_uns_f3, ]
-
-    mod_r <- ranger(TrueRichness ~ pH + MAT + MAP + SOC + X + Y,
-                    data = train_d, num.trees = 200,
-                    quantreg = TRUE, keep.inbag = TRUE,
-                    num.threads = 1, save.memory = TRUE)
-    mod_l <- ranger(LCBD ~ pH + MAT + MAP + SOC + X + Y,
-                    data = train_d, num.trees = 200,
-                    quantreg = TRUE, keep.inbag = TRUE,
-                    num.threads = 1, save.memory = TRUE)
-
-    pr_val <- predict(mod_r, data = cand_d)$predictions
-    pl_val <- predict(mod_l, data = cand_d)$predictions
-    pr_se  <- predict(mod_r, data = cand_d, type = "se")$se
-
-    sc       <- WR3 * norm01(pr_val) + WU3 * norm01(pl_val) + WUNC3 * norm01(pr_se)
-    best_loc <- order(sc, decreasing = TRUE)[seq_len(BATCH_F3_SIZE)]
-
-    new_nodes   <- curr_uns_f3[best_loc]
-    curr_sam_f3 <- c(curr_sam_f3, new_nodes)
-    curr_uns_f3 <- curr_uns_f3[-best_loc]
-    n_tot_f3    <- n_tot_f3 + BATCH_F3_SIZE
-
-    # Record every batch (SNAPSHOTS_F3 now covers every BATCH_F3_SIZE step)
-    new_at_snap <- setdiff(curr_sam_f3, prev_f3)
-    traj_f3[[snap_f3]] <- list(
-      n       = n_tot_f3,
-      sampled = curr_sam_f3,
-      new     = new_at_snap
-    )
-    message("  Batch n = ", n_tot_f3, " recorded.")
-    prev_f3  <- curr_sam_f3
-    snap_f3  <- snap_f3 + 1L
-    gc()
-  }
+  traj_f3 <- list(); prev_f3 <- integer(0)
+  rec_f3  <- function(S, b) { traj_f3[[b + 1L]] <<- list(n = length(S), sampled = S, new = setdiff(S, prev_f3)); prev_f3 <<- S
+                              message("  Batch n = ", length(S), " recorded.") }
+  invisible(run_campaign("BAS", master_f3, comm_pa_f3, init_f3, rnd_f3, batch = BATCH_F3_SIZE,
+                         n_batches = (max(SNAPSHOTS_F3) - N_INIT_F3) / BATCH_F3_SIZE, engine = "qrf", w = W_F3, n_trees = 200, record = rec_f3))
 
   panel_idx_f3        <- which(SNAPSHOTS_F3 %in% PANEL_STEPS_F3)
   step_labels_f3      <- paste0("n = ", format(SNAPSHOTS_F3[panel_idx_f3], big.mark = ","))
