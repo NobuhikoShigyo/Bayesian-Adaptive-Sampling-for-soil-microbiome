@@ -1,58 +1,75 @@
 # ==============================================================================
-# 04: Figure 4 — rare-biosphere comparison, "unique to BAS" vs "unique to Random"
-#
-# One representative campaign per scale (seed 42), same engines/weights as 01 and 03.
-# Taxa detected by one strategy but not the other are compared by their mean
-# relative abundance across all sites (ECDF; one-sided Wilcoxon, BAS rarer).
-# v3 (2026-10): uses bas_core.R (novelty uniqueness; RK engine locally, QRF globally)
-# Output: Fig4AB.png / .pdf and summary statistics on the console
+# 04: Figure 4 — what kind of diversity does BAS find?
+#   (A) local  : cumulative number of range-restricted ASVs (present at <= RARE_LOCAL of 53 sites)
+#   (B) global : cumulative number of range-restricted SHs  (present at <= RARE_GLOBAL of 5,000 sites)
+#   (C) global : share of sampled sites south of 20°N (the region under-represented in the pilot)
+#   BAS vs Random vs Oracle, mean ± SD across 100 simulation runs; same pilot sets as 01 / 03.
+# v4 (2026-10): replaces the single-campaign abundance ECDF.
+# Output: fig4_trajectories.rds, Fig4ABC.png / .pdf
 # ==============================================================================
-suppressMessages({library(dplyr); library(ggplot2); library(patchwork); library(Matrix)})
+suppressMessages({library(dplyr); library(foreach); library(doParallel); library(Matrix); library(ggplot2); library(patchwork)})
 source("bas_core.R")
 
 W_LOCAL  <- as.numeric(strsplit(Sys.getenv("BAS_WEIGHTS_LOCAL",  "0.4,0.3,0.3"), ",")[[1]])
-W_GLOBAL <- as.numeric(strsplit(Sys.getenv("BAS_WEIGHTS_GLOBAL", "0.2,0.4,0.4"), ",")[[1]])
-N_TREES  <- as.integer(Sys.getenv("N_TREES", "200"))
+W_GLOBAL <- as.numeric(strsplit(Sys.getenv("BAS_WEIGHTS_GLOBAL", "0.2,0.6,0.2"), ",")[[1]])
+N_TREES  <- as.integer(Sys.getenv("N_TREES", "200")); N_SIM <- as.integer(Sys.getenv("N_SIM", "100"))
+RARE_LOCAL <- 2; RARE_GLOBAL <- 5
+cols <- c("Oracle" = "#009E73", "BAS" = "#0072B2", "Random" = "#D55E00"); lts <- c("Oracle" = "dashed", "BAS" = "solid", "Random" = "solid")
 
-mean_rel_abund <- function(rel) colMeans(rel)          # rel = relative-abundance matrix (rows sum to 1)
-sym_df <- function(idx_bas, idx_rnd, mra) {
-  ub <- setdiff(idx_bas, idx_rnd); ur <- setdiff(idx_rnd, idx_bas)
-  data.frame(Group = c(rep("Unique to BAS", length(ub)), rep("Unique to Random", length(ur))),
-             MeanRelAbundance = c(mra[ub], mra[ur])) %>% filter(MeanRelAbundance > 0)
+if (!file.exists("fig4_trajectories.rds")) {
+  # ---- local ---------------------------------------------------------------
+  mdL <- readRDS("master_data_local.rds"); paL <- readRDS("comm_data_pa_local.rds"); rareL <- colSums(paL) <= RARE_LOCAL
+  cl <- makeCluster(as.integer(Sys.getenv("N_WORKERS", "10")), type = "PSOCK", outfile = ""); registerDoParallel(cl)
+  clusterEvalQ(cl, { source("bas_core.R"); library(Matrix) }); clusterExport(cl, c("mdL", "paL", "rareL", "W_LOCAL"))
+  resL <- foreach(sim = 1:N_SIM, .combine = rbind, .packages = "Matrix") %dopar% {
+    pl <- draw_pilot_local(sim, nrow(mdL), 5); out <- list()
+    for (st in c("BAS", "Random", "Oracle")) {
+      rec <- function(S, b) out[[length(out) + 1]] <<- data.frame(SimID = sim, Method = st, n_samples = length(S),
+                                                                   Rare = sum(colSums(paL[S, rareL, drop = FALSE]) > 0))
+      run_campaign(st, mdL, paL, pl$init, pl$rnd_order, 5, 5, engine = "rk", w = W_LOCAL, record = rec) }
+    do.call(rbind, out) }
+  # ---- global --------------------------------------------------------------
+  mdG <- readRDS("master_data_GlobalFungi.rds"); paG <- readRDS("comm_pa_sp_GlobalFungi.rds")
+  rareG <- which(Matrix::colSums(paG) <= RARE_GLOBAL); south <- mdG$latitude < 20
+  clusterExport(cl, c("mdG", "paG", "rareG", "south", "W_GLOBAL", "N_TREES"))
+  resG <- foreach(sim = 1:N_SIM, .combine = rbind, .packages = "Matrix") %dopar% {
+    pl <- draw_pilot_global(sim, mdG, 1000); out <- list()
+    for (st in c("BAS", "Random", "Oracle")) {
+      rec <- function(S, b) out[[length(out) + 1]] <<- data.frame(SimID = sim, Method = st, n_samples = length(S),
+                                                                   Rare = sum(Matrix::colSums(paG[S, rareG, drop = FALSE]) > 0), South = mean(south[S]))
+      run_campaign(st, mdG, paG, pl$init, pl$rnd_order, 100, 20, engine = "qrf", w = W_GLOBAL, n_trees = N_TREES, record = rec) }
+    cat(sprintf("sim %d done\n", sim)); do.call(rbind, out) }
+  stopCluster(cl)
+  saveRDS(list(local = resL, global = resG, rare_local = RARE_LOCAL, rare_global = RARE_GLOBAL,
+               n_rare_local = sum(rareL), n_rare_global = length(rareG), south_pool = mean(south)), "fig4_trajectories.rds")
 }
-sig_star4 <- function(p) ifelse(p < 1e-4, "****", ifelse(p < 1e-3, "***", ifelse(p < 0.01, "**", ifelse(p < 0.05, "*", "ns"))))
-cols <- c("Unique to BAS" = "#0072B2", "Unique to Random" = "#D55E00")
-panel <- function(df, tag) {
-  p <- wilcox.test(df$MeanRelAbundance[df$Group == "Unique to BAS"], df$MeanRelAbundance[df$Group == "Unique to Random"], alternative = "less")$p.value
-  g <- ggplot(df, aes(MeanRelAbundance, color = Group)) + stat_ecdf(linewidth = 1.2) +
-    scale_x_log10(labels = scales::label_scientific()) + scale_color_manual(values = cols) +
-    labs(tag = tag, x = "Mean Relative Abundance", y = "Cumulative Proportion") +
-    annotate("text", x = Inf, y = 0.02, hjust = 1.1, label = paste0("Wilcoxon ", sig_star4(p)), size = 4) +
-    theme_minimal(base_size = 14) + theme(legend.position = c(0.72, 0.18), legend.title = element_blank())
-  list(plot = g, p = p)
+tr <- readRDS("fig4_trajectories.rds")
+
+curve_panel <- function(df, yvar, ylab, tag, hline = NULL, sub = NULL, pct = FALSE) {
+  s <- df %>% group_by(n_samples, Method) %>% summarise(Mean = mean(.data[[yvar]]), SD = sd(.data[[yvar]]), .groups = "drop") %>%
+    mutate(Method = factor(Method, c("Oracle", "BAS", "Random")))
+  p <- ggplot(s, aes(n_samples, Mean, color = Method, fill = Method, linetype = Method)) +
+    geom_ribbon(aes(ymin = Mean - SD, ymax = Mean + SD), alpha = 0.15, linetype = 0) + geom_line(linewidth = 1.2) +
+    scale_color_manual(values = cols) + scale_fill_manual(values = cols) + scale_linetype_manual(values = lts) +
+    labs(tag = tag, x = "Number of Samples", y = ylab, subtitle = sub) +
+    theme_minimal(base_size = 14) + theme(legend.position = "bottom", legend.title = element_blank())
+  if (!is.null(hline)) p <- p + geom_hline(yintercept = hline, color = "grey40", linetype = "dotted") +
+    annotate("text", x = Inf, y = hline, label = "share among all candidates", hjust = 1.05, vjust = -0.4, size = 3.5, color = "grey40")
+  if (pct) p <- p + scale_y_continuous(labels = scales::percent_format(accuracy = 1))
+  p
 }
-stats_of <- function(df) df %>% group_by(Group) %>% summarise(N = n(), Mean = mean(MeanRelAbundance), Median = median(MeanRelAbundance), .groups = "drop")
+pA <- curve_panel(tr$local,  "Rare",  "Range-restricted ASVs found", "A", sub = sprintf("Local: ASVs present at ≤ %d of 53 sites (%s ASVs)", tr$rare_local, format(tr$n_rare_local, big.mark = ",")))
+pB <- curve_panel(tr$global, "Rare",  "Range-restricted SHs found",  "B", sub = sprintf("Global: SHs present at ≤ %d of 5,000 sites (%s SHs)", tr$rare_global, format(tr$n_rare_global, big.mark = ",")))
+pC <- curve_panel(tr$global, "South", "Share of sampled sites south of 20°N", "C", hline = tr$south_pool, sub = "Global: sites south of 2000b0N (under-sampled in the pilot)", pct = TRUE)
+fig4 <- (pA | pB | pC) + plot_layout(guides = "collect") & theme(legend.position = "bottom")
+ggsave("Fig4ABC.png", fig4, width = 15, height = 5.5, dpi = 300); ggsave("Fig4ABC.pdf", fig4, width = 15, height = 5.5)
 
-# ---- Local -------------------------------------------------------------------
-md_L <- readRDS("master_data_local.rds"); comm_L <- readRDS("comm_data_local.rds"); pa_L <- readRDS("comm_data_pa_local.rds")
-set.seed(42); init_L <- sample(seq_len(nrow(md_L)), 5); rnd_L <- sample(setdiff(seq_len(nrow(md_L)), init_L))
-S_bas_L <- run_campaign("BAS",    md_L, pa_L, init_L, rnd_L, batch = 5, n_batches = 5, engine = "rk", w = W_LOCAL)
-S_rnd_L <- run_campaign("Random", md_L, pa_L, init_L, rnd_L, batch = 5, n_batches = 5)
-mra_L   <- mean_rel_abund(comm_L / rowSums(comm_L))
-df_L    <- sym_df(which(colSums(pa_L[S_bas_L, ]) > 0), which(colSums(pa_L[S_rnd_L, ]) > 0), mra_L)
-A <- panel(df_L, "A")
-
-# ---- Global ------------------------------------------------------------------
-md_G <- readRDS("master_data_GlobalFungi.rds"); pa_G <- readRDS("comm_pa_sp_GlobalFungi.rds"); hel_G <- readRDS("comm_hel_GlobalFungi.rds")
-set.seed(42); prob_w <- ifelse(md_G$latitude > 20, 1.0, 0.05)
-init_G <- sample(seq_len(nrow(md_G)), 1000, prob = prob_w); rnd_G <- sample(setdiff(seq_len(nrow(md_G)), init_G))
-S_bas_G <- run_campaign("BAS",    md_G, pa_G, init_G, rnd_G, batch = 100, n_batches = 10, engine = "qrf", w = W_GLOBAL, n_trees = N_TREES)
-S_rnd_G <- run_campaign("Random", md_G, pa_G, init_G, rnd_G, batch = 100, n_batches = 10)
-mra_G   <- mean_rel_abund(hel_G^2)                      # Hellinger^2 = relative abundance
-df_G    <- sym_df(which(Matrix::colSums(pa_G[S_bas_G, ]) > 0), which(Matrix::colSums(pa_G[S_rnd_G, ]) > 0), mra_G)
-B <- panel(df_G, "B")
-
-fig4 <- A$plot + B$plot
-ggsave("Fig4AB.png", fig4, width = 10, height = 6, dpi = 300); ggsave("Fig4AB.pdf", fig4, width = 10, height = 6)
-cat("\n--- Local (n = 30) ---\n"); print(stats_of(df_L)); cat("P =", signif(A$p, 3), "\n")
-cat("\n--- Global (n = 2000) ---\n"); print(stats_of(df_G)); cat("P =", signif(B$p, 3), "\n")
+# ---- numbers for the text ----------------------------------------------------
+summ <- function(df, yvar, ns) df %>% filter(n_samples %in% ns) %>% group_by(n_samples, Method) %>%
+  summarise(m = mean(.data[[yvar]]), sd = sd(.data[[yvar]]), .groups = "drop") %>% tidyr::pivot_wider(names_from = Method, values_from = c(m, sd))
+cat("\n--- local: range-restricted ASVs ---\n");  print(as.data.frame(summ(tr$local, "Rare", c(10, 20, 30))), digits = 5)
+cat("\n--- global: range-restricted SHs ---\n");  print(as.data.frame(summ(tr$global, "Rare", c(1200, 1500, 2000, 2500, 3000))), digits = 5)
+cat("\n--- global: share south of 20N (pool =", round(tr$south_pool, 3), ") ---\n"); print(as.data.frame(summ(tr$global, "South", c(1000, 1200, 1500, 2000, 3000))), digits = 3)
+pt <- function(df, yvar, n) { w <- df %>% filter(n_samples == n) %>% select(SimID, Method, all_of(yvar)) %>% tidyr::pivot_wider(names_from = Method, values_from = all_of(yvar))
+  t.test(w$BAS, w$Random, paired = TRUE, alternative = "greater")$p.value }
+cat("\nP (BAS > Random, paired one-sided): local rare n=20:", signif(pt(tr$local, "Rare", 20), 3), " global rare n=1500:", signif(pt(tr$global, "Rare", 1500), 3), " n=3000:", signif(pt(tr$global, "Rare", 3000), 3), " south n=1500:", signif(pt(tr$global, "South", 1500), 3), "\n")

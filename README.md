@@ -62,7 +62,7 @@ Weights are passed through environment variables (`BAS_WEIGHTS`, `BAS_WEIGHTS_LO
 | `01_BAS_simulation_Fig2AB.R` | Case 1 (local catchment, N = 53, regression kriging via `gstat` + `automap`) — BAS vs Random vs Oracle, 100 simulations → `simulation_results_Fig2AB.rds` | Fig. 2A–B |
 | `02_BAS_Precompute_GlobalFungi.R` | `K_GlobalFungi.rds` (5000 × 5000 Hellinger kernel, not needed by v3 but kept for the LCBD comparison) and `comm_pa_sp_GlobalFungi.rds` (sparse presence/absence) — run once | — |
 | `03_BAS_simulation_Fig3AB.R` | Case 2 (GlobalFungi, N = 5000, Quantile Regression Forest via `ranger`, 200 trees) — BAS vs Random vs Oracle, 100 simulations → `simulation_results_Fig3AB.rds` | Fig. 3A–B |
-| `04_BAS_plot_Fig4.R` | Rare-biosphere comparison: relative abundance of taxa unique to BAS vs unique to Random (one campaign per scale) | Fig. 4A–B |
+| `04_BAS_plot_Fig4.R` | Cumulative discovery of range-restricted taxa (local: ASVs at ≤ 2 of 53 sites; global: SHs at ≤ 5 of 5,000 sites) and the share of sampled sites south of 20°N, BAS vs Random vs Oracle, 100 simulations → `fig4_trajectories.rds` | Fig. 4A–C |
 | `05_BAS_WeightGridSearch_local.R` | 66-point grid over (W_rich, W_uniq, W_unc), local dataset, 50 simulations each → `gridsearch_results_local.rds` | — |
 | `06_plot_WeightGridSearch.R` | Ternary plots of 05 and 07 | Fig. S1, S2 |
 | `07_BAS_WeightGridSearch_GlobalFungi.R` | Same grid on GlobalFungi (10 simulations, 100 trees — reduced for run time) → `gridsearch_results_global.rds` | — |
@@ -75,7 +75,7 @@ setwd("<path>/BAS_publication/analysis")
 source("01_BAS_simulation_Fig2AB.R")        # ~2 min on 6 cores
 source("02_BAS_Precompute_GlobalFungi.R")   # once; needs comm_hel_GlobalFungi.rds (included)
 source("03_BAS_simulation_Fig3AB.R")        # ~12 min on 10 cores
-source("04_BAS_plot_Fig4.R")
+source("04_BAS_plot_Fig4.R")                 # ~12 min on 10 cores
 source("05_BAS_WeightGridSearch_local.R")   # ~15 min on 6 cores
 source("07_BAS_WeightGridSearch_GlobalFungi.R")   # ~55 min on 8 cores
 source("06_plot_WeightGridSearch.R")
@@ -147,6 +147,7 @@ The transformed objects derived from them (`comm_pa_GlobalFungi.rds`, `comm_pa_s
 | `results/simulation_results_Fig3AB.rds` | Cumulative richness per (simulation, n, strategy) for Case 2: BAS / Random / Oracle × 100 simulations × n = 1000…3000 |
 | `results/gridsearch_results_local.rds` | Local weight grid search (66 combinations × 50 simulations) |
 | `results/gridsearch_results_global.rds` | Global weight grid search (66 × 10) |
+| `results/fig4_trajectories.rds` | Range-restricted taxa found and southern share per (simulation, n, strategy), both scales (Fig. 4) |
 
 ---
 
