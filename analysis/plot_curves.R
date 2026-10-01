@@ -16,7 +16,7 @@ plot_bas_figure <- function(df, target_box, xlim, file, width = 10, height = 12,
     geom_ribbon(aes(ymin = Mean - SD, ymax = Mean + SD), alpha = 0.15, linetype = 0) +
     geom_line(linewidth = 1.2) +
     scale_color_manual(values = bas_cols) + scale_fill_manual(values = bas_cols) + scale_linetype_manual(values = bas_lts) +
-    labs(tag = "A", x = "Number of Samples", y = "Cumulative Richness", subtitle = "Dashed line = theoretical maximum (Oracle)") +
+    labs(tag = "A", x = "Number of Samples", y = "Cumulative Richness") +
     theme_minimal(base_size = 14) + theme(legend.position = "bottom", legend.title = element_blank())
   box <- df %>% filter(n_samples %in% target_box, Method %in% c("BAS", "Random")) %>%
     mutate(n_label = factor(paste("n =", n_samples), paste("n =", target_box)), Method = factor(Method, c("BAS", "Random")))

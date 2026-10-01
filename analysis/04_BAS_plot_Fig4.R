@@ -45,24 +45,27 @@ if (!file.exists("fig4_trajectories.rds")) {
 }
 tr <- readRDS("fig4_trajectories.rds")
 
-curve_panel <- function(df, yvar, ylab, tag, hline = NULL, sub = NULL, pct = FALSE) {
+curve_panel <- function(df, yvar, ylab, tag, hline = NULL, pct = FALSE) {
   s <- df %>% group_by(n_samples, Method) %>% summarise(Mean = mean(.data[[yvar]]), SD = sd(.data[[yvar]]), .groups = "drop") %>%
     mutate(Method = factor(Method, c("Oracle", "BAS", "Random")))
   p <- ggplot(s, aes(n_samples, Mean, color = Method, fill = Method, linetype = Method)) +
     geom_ribbon(aes(ymin = Mean - SD, ymax = Mean + SD), alpha = 0.15, linetype = 0) + geom_line(linewidth = 1.2) +
     scale_color_manual(values = cols) + scale_fill_manual(values = cols) + scale_linetype_manual(values = lts) +
-    labs(tag = tag, x = "Number of Samples", y = ylab, subtitle = sub) +
-    theme_minimal(base_size = 14) + theme(legend.position = "bottom", legend.title = element_blank())
+    labs(tag = tag, x = "Number of Samples", y = ylab) +
+    theme_minimal(base_size = 14) + theme(legend.position = "bottom", legend.title = element_blank(), plot.margin = margin(10, 15, 5, 5))
   if (!is.null(hline)) p <- p + geom_hline(yintercept = hline, color = "grey40", linetype = "dotted") +
     annotate("text", x = Inf, y = hline, label = "share among all candidates", hjust = 1.05, vjust = -0.4, size = 3.5, color = "grey40")
   if (pct) p <- p + scale_y_continuous(labels = scales::percent_format(accuracy = 1))
   p
 }
-pA <- curve_panel(tr$local,  "Rare",  "Range-restricted ASVs found", "A", sub = sprintf("Local: ASVs present at ≤ %d of 53 sites (%s ASVs)", tr$rare_local, format(tr$n_rare_local, big.mark = ",")))
-pB <- curve_panel(tr$global, "Rare",  "Range-restricted SHs found",  "B", sub = sprintf("Global: SHs present at ≤ %d of 5,000 sites (%s SHs)", tr$rare_global, format(tr$n_rare_global, big.mark = ",")))
-pC <- curve_panel(tr$global, "South", "Share of sampled sites south of 20°N", "C", hline = tr$south_pool, sub = "Global: sites south of 2000b0N (under-sampled in the pilot)", pct = TRUE)
+pA <- curve_panel(tr$local,  "Rare",  sprintf("Range-restricted ASVs found
+(present at ≤ %d of 53 sites)", tr$rare_local), "A")
+pB <- curve_panel(tr$global, "Rare",  sprintf("Range-restricted SHs found
+(present at ≤ %d of 5,000 sites)", tr$rare_global), "B")
+pC <- curve_panel(tr$global, "South", "Sampled sites south of 20°N
+(share of sites sampled so far)", "C", hline = tr$south_pool, pct = TRUE)
 fig4 <- (pA | pB | pC) + plot_layout(guides = "collect") & theme(legend.position = "bottom")
-ggsave("Fig4ABC.png", fig4, width = 15, height = 5.5, dpi = 300); ggsave("Fig4ABC.pdf", fig4, width = 15, height = 5.5)
+ggsave("Fig4ABC.png", fig4, width = 15, height = 6, dpi = 300); ggsave("Fig4ABC.pdf", fig4, width = 15, height = 6)
 
 # ---- numbers for the text ----------------------------------------------------
 summ <- function(df, yvar, ns) df %>% filter(n_samples %in% ns) %>% group_by(n_samples, Method) %>%
