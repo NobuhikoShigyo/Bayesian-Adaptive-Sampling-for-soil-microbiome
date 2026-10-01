@@ -23,7 +23,7 @@ plot_grid_ternary <- function(rds, eval_ns, used_w, title, subtitle, file, ncol 
   p_facet <- ggtern(summ, aes(x = Wr, y = Wu, z = Wunc, color = mean_richness)) +
     geom_point(size = 2.8, alpha = 0.88) +
     geom_point(data = best, color = "red", fill = "red", shape = 23, size = 5, show.legend = FALSE) +
-    geom_point(data = used, color = "white", fill = "white", shape = 21, size = 3.5, show.legend = FALSE) +
+    geom_point(data = used, color = "black", fill = "white", shape = 21, size = 4, stroke = 1, show.legend = FALSE) +
     scale_color_viridis_c(option = "plasma", name = "Mean\nrichness", limits = range(summ$mean_richness)) +
     facet_wrap(~eval_n, ncol = ncol) +
     labs(title = title, subtitle = subtitle, x = expression(W[rich]), y = expression(W[uniq]), z = expression(W[unc])) +
