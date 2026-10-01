@@ -24,18 +24,21 @@ master_data <- readRDS("master_data_local.rds"); comm_pa <- readRDS("comm_data_p
 
 # ---- Settings ----------------------------------------------------------------
 N_SIMULATIONS <- 100; N_INITIAL <- 5; BATCH_SIZE <- 5; N_TOTAL <- 30
+SIM_OFFSET    <- as.integer(Sys.getenv("SIM_OFFSET", "50"))   # evaluation runs use pilot sets 51-150; the grid search (05) used 1-50
+W_EQUAL       <- c(1/3, 1/3, 1/3)                                # sensitivity arm with equal weights (Fig. S5)
 N_BATCHES     <- (N_TOTAL - N_INITIAL) / BATCH_SIZE
-W_BAS         <- as.numeric(strsplit(Sys.getenv("BAS_WEIGHTS", "0.4,0.3,0.3"), ",")[[1]])   # (W_rich, W_uniq, W_unc) from grid search (05)
+W_BAS         <- as.numeric(strsplit(Sys.getenv("BAS_WEIGHTS", "0.4,0.2,0.4"), ",")[[1]])   # (W_rich, W_uniq, W_unc) from grid search (05)
 N_WORKERS     <- as.integer(Sys.getenv("N_WORKERS", "6"))
 message(sprintf("weights: rich=%.2f uniq=%.2f unc=%.2f", W_BAS[1], W_BAS[2], W_BAS[3]))
 
 # ---- Simulation ---------------------------------------------------------------
 cl <- makeCluster(N_WORKERS, type = "PSOCK"); registerDoParallel(cl)
 clusterEvalQ(cl, { source("bas_core.R"); library(Matrix) })
-clusterExport(cl, c("master_data", "comm_pa", "N_INITIAL", "BATCH_SIZE", "N_BATCHES", "W_BAS"))
-results_df <- foreach(sim = 1:N_SIMULATIONS, .combine = rbind, .packages = c("dplyr", "Matrix")) %dopar% {
+clusterExport(cl, c("master_data", "comm_pa", "N_INITIAL", "BATCH_SIZE", "N_BATCHES", "W_BAS", "W_EQUAL", "SIM_OFFSET"))
+results_df <- foreach(sim = SIM_OFFSET + (1:N_SIMULATIONS), .combine = rbind, .packages = c("dplyr", "Matrix")) %dopar% {
   pl <- draw_pilot_local(sim, nrow(master_data), N_INITIAL)
   rbind(campaign_curve("BAS",    "BAS",    sim, master_data, comm_pa, pl$init, pl$rnd_order, BATCH_SIZE, N_BATCHES, engine = "rk", w = W_BAS),
+        campaign_curve("BAS",    "BAS (equal weights)", sim, master_data, comm_pa, pl$init, pl$rnd_order, BATCH_SIZE, N_BATCHES, engine = "rk", w = W_EQUAL),
         campaign_curve("Random", "Random", sim, master_data, comm_pa, pl$init, pl$rnd_order, BATCH_SIZE, N_BATCHES),
         campaign_curve("Oracle", "Oracle", sim, master_data, comm_pa, pl$init, pl$rnd_order, BATCH_SIZE, N_BATCHES))
 }

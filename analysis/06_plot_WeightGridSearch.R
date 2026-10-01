@@ -43,8 +43,8 @@ plot_grid_ternary <- function(rds, eval_ns, used_w, title, subtitle, file, ncol 
   message("Saved: ", file)
 }
 
-W_LOCAL  <- as.numeric(strsplit(Sys.getenv("BAS_WEIGHTS_LOCAL",  "0.4,0.3,0.3"), ",")[[1]])
-W_GLOBAL <- as.numeric(strsplit(Sys.getenv("BAS_WEIGHTS_GLOBAL", "0.2,0.4,0.4"), ",")[[1]])
+W_LOCAL  <- as.numeric(strsplit(Sys.getenv("BAS_WEIGHTS_LOCAL",  "0.4,0.2,0.4"), ",")[[1]])
+W_GLOBAL <- as.numeric(strsplit(Sys.getenv("BAS_WEIGHTS_GLOBAL", "0.2,0.6,0.2"), ",")[[1]])
 
 plot_grid_ternary("gridsearch_results_local.rds", c(10, 15, 20, 25, 30), W_LOCAL,
   "BAS weight grid search — local catchment (Case 1)",

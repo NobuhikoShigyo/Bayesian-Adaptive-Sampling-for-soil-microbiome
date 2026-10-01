@@ -10,9 +10,10 @@
 suppressMessages({library(dplyr); library(foreach); library(doParallel); library(Matrix); library(ggplot2); library(patchwork)})
 source("bas_core.R")
 
-W_LOCAL  <- as.numeric(strsplit(Sys.getenv("BAS_WEIGHTS_LOCAL",  "0.4,0.3,0.3"), ",")[[1]])
+W_LOCAL  <- as.numeric(strsplit(Sys.getenv("BAS_WEIGHTS_LOCAL",  "0.4,0.2,0.4"), ",")[[1]])
 W_GLOBAL <- as.numeric(strsplit(Sys.getenv("BAS_WEIGHTS_GLOBAL", "0.2,0.6,0.2"), ",")[[1]])
 N_TREES  <- as.integer(Sys.getenv("N_TREES", "200")); N_SIM <- as.integer(Sys.getenv("N_SIM", "100"))
+OFF_L <- as.integer(Sys.getenv("SIM_OFFSET_LOCAL", "50")); OFF_G <- as.integer(Sys.getenv("SIM_OFFSET_GLOBAL", "10"))   # same evaluation pilot sets as 01 / 03
 RARE_LOCAL <- 2; RARE_GLOBAL <- 5
 cols <- c("Oracle" = "#009E73", "BAS" = "#0072B2", "Random" = "#D55E00"); lts <- c("Oracle" = "dashed", "BAS" = "solid", "Random" = "solid")
 
@@ -20,8 +21,8 @@ if (!file.exists("fig4_trajectories.rds")) {
   # ---- local ---------------------------------------------------------------
   mdL <- readRDS("master_data_local.rds"); paL <- readRDS("comm_data_pa_local.rds"); rareL <- colSums(paL) <= RARE_LOCAL
   cl <- makeCluster(as.integer(Sys.getenv("N_WORKERS", "10")), type = "PSOCK", outfile = ""); registerDoParallel(cl)
-  clusterEvalQ(cl, { source("bas_core.R"); library(Matrix) }); clusterExport(cl, c("mdL", "paL", "rareL", "W_LOCAL"))
-  resL <- foreach(sim = 1:N_SIM, .combine = rbind, .packages = "Matrix") %dopar% {
+  clusterEvalQ(cl, { source("bas_core.R"); library(Matrix) }); clusterExport(cl, c("mdL", "paL", "rareL", "W_LOCAL", "OFF_L"))
+  resL <- foreach(sim = OFF_L + (1:N_SIM), .combine = rbind, .packages = "Matrix") %dopar% {
     pl <- draw_pilot_local(sim, nrow(mdL), 5); out <- list()
     for (st in c("BAS", "Random", "Oracle")) {
       rec <- function(S, b) out[[length(out) + 1]] <<- data.frame(SimID = sim, Method = st, n_samples = length(S),
@@ -31,8 +32,8 @@ if (!file.exists("fig4_trajectories.rds")) {
   # ---- global --------------------------------------------------------------
   mdG <- readRDS("master_data_GlobalFungi.rds"); paG <- readRDS("comm_pa_sp_GlobalFungi.rds")
   rareG <- which(Matrix::colSums(paG) <= RARE_GLOBAL); south <- mdG$latitude < 20
-  clusterExport(cl, c("mdG", "paG", "rareG", "south", "W_GLOBAL", "N_TREES"))
-  resG <- foreach(sim = 1:N_SIM, .combine = rbind, .packages = "Matrix") %dopar% {
+  clusterExport(cl, c("mdG", "paG", "rareG", "south", "W_GLOBAL", "N_TREES", "OFF_G"))
+  resG <- foreach(sim = OFF_G + (1:N_SIM), .combine = rbind, .packages = "Matrix") %dopar% {
     pl <- draw_pilot_global(sim, mdG, 1000); out <- list()
     for (st in c("BAS", "Random", "Oracle")) {
       rec <- function(S, b) out[[length(out) + 1]] <<- data.frame(SimID = sim, Method = st, n_samples = length(S),

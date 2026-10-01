@@ -28,6 +28,10 @@ richness_of <- function(pa, S) sum(Matrix::colSums(pa[S, , drop = FALSE]) > 0)
 
 # ---- Engine: regression kriging with automap variogram -----------------------
 # master_data must contain X, Y and the covariates named in `covs`
+# NOTE: automap::autofitVariogram can crash the R session with very few training points
+# (observed with 5 points); below MIN_AUTOFIT sites a nugget-only model (the covariate regression) is used.
+MIN_AUTOFIT <- 10
+SMALL_N_RULE <- "fixed_exp"   # "fixed_exp": exponential variogram with psill = var(y), range = median pairwise distance; "nugget": covariate regression only
 engine_rk <- function(master_data, S, U, y_rich, y_uniq, covs = c("pH", "WC")) {
   tr <- master_data[S, ]; tr$RICH <- y_rich; tr$UNIQ <- y_uniq
   cd <- master_data[U, ]
@@ -35,10 +39,13 @@ engine_rk <- function(master_data, S, U, y_rich, y_uniq, covs = c("pH", "WC")) {
   rhs <- paste(covs, collapse = " + ")
   one <- function(resp) {
     fm <- stats::as.formula(paste(resp, "~", rhs))
-    vg <- tryCatch(suppressWarnings(automap::autofitVariogram(fm, tr, model = c("Sph", "Exp", "Mat"))$var_model),
-                   error = function(e) NULL)
-    if (is.null(vg)) { v0 <- stats::var(tr@data[[resp]], na.rm = TRUE)
-      vg <- gstat::vgm(psill = if (is.finite(v0) && v0 > 0) v0 else 1, model = "Nug", nugget = 0) }
+    vg <- if (length(S) >= MIN_AUTOFIT) tryCatch(suppressWarnings(automap::autofitVariogram(fm, tr, model = c("Sph", "Exp", "Mat"))$var_model),
+                                                  error = function(e) NULL) else NULL
+    if (is.null(vg)) { v0 <- stats::var(tr@data[[resp]], na.rm = TRUE); v0 <- if (is.finite(v0) && v0 > 0) v0 else 1
+      if (length(S) < MIN_AUTOFIT && SMALL_N_RULE == "fixed_exp") {
+        d <- as.matrix(stats::dist(sp::coordinates(tr))); rng <- stats::median(d[upper.tri(d)]); if (!is.finite(rng) || rng <= 0) rng <- 1
+        vg <- gstat::vgm(psill = v0, model = "Exp", range = rng, nugget = 0)
+      } else vg <- gstat::vgm(psill = v0, model = "Nug", nugget = 0) }
     p <- tryCatch(suppressWarnings(suppressMessages(gstat::krige(fm, tr, cd, model = vg, debug.level = -1))),
                   error = function(e) NULL)
     if (is.null(p)) return(NULL)

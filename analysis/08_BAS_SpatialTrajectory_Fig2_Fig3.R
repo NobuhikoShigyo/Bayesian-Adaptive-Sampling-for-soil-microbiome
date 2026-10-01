@@ -111,7 +111,7 @@ BATCH_F2       <- 5
 N_INIT_F2      <- 5
 SNAPSHOTS_F2   <- seq(N_INIT_F2, 30, by = BATCH_F2)  # every batch: 5,10,15,20,25,30
 PANEL_STEPS_F2 <- c(5, 10, 20, 30)                    # milestone steps for static plot
-W_F2 <- as.numeric(strsplit(Sys.getenv("BAS_WEIGHTS_LOCAL", "0.4,0.3,0.3"), ",")[[1]])   # same weights as 01
+W_F2 <- as.numeric(strsplit(Sys.getenv("BAS_WEIGHTS_LOCAL", "0.4,0.2,0.4"), ",")[[1]])   # same weights as 01
 
 set.seed(42)
 init_idx_f2 <- sample(seq_len(N_F2), N_INIT_F2)
@@ -282,7 +282,7 @@ if (!all(file.exists(rds_needed))) {
   N_INIT_F3      <- 1000
   SNAPSHOTS_F3   <- seq(N_INIT_F3, 3000, by = BATCH_F3_SIZE)  # every batch: 1000,1100,...,3000
   PANEL_STEPS_F3 <- c(1000, 1500, 2000, 3000)                  # milestone steps for static plot
-  W_F3 <- as.numeric(strsplit(Sys.getenv("BAS_WEIGHTS_GLOBAL", "0.2,0.4,0.4"), ",")[[1]])   # same weights as 03
+  W_F3 <- as.numeric(strsplit(Sys.getenv("BAS_WEIGHTS_GLOBAL", "0.2,0.6,0.2"), ",")[[1]])   # same weights as 03
 
   set.seed(42)
   prob_w    <- ifelse(master_f3$latitude > 20, 1.0, 0.05)

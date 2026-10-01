@@ -9,7 +9,7 @@ bas_lts  <- c("Oracle" = "dashed", "BAS" = "solid", "Random" = "solid")
 sig_star <- function(p) ifelse(p < 0.001, "***", ifelse(p < 0.01, "**", ifelse(p < 0.05, "*", "ns")))
 
 plot_bas_figure <- function(df, target_box, xlim, file, width = 10, height = 12, dpi = 300) {
-  lv <- c("Oracle", "BAS", "Random")
+  lv <- c("Oracle", "BAS", "Random"); df <- df %>% filter(Method %in% lv)
   summ <- df %>% filter(n_samples >= xlim[1], n_samples <= xlim[2]) %>% group_by(n_samples, Method) %>%
     summarise(Mean = mean(Richness), SD = sd(Richness), .groups = "drop") %>% mutate(Method = factor(Method, lv))
   pA <- ggplot(summ, aes(n_samples, Mean, color = Method, fill = Method, linetype = Method)) +
@@ -43,7 +43,7 @@ plot_bas_figure <- function(df, target_box, xlim, file, width = 10, height = 12,
 }
 
 summarise_bas <- function(df, ns) {
-  wide <- df %>% filter(n_samples %in% ns) %>% tidyr::pivot_wider(names_from = Method, values_from = Richness)
+  wide <- df %>% filter(n_samples %in% ns, Method %in% c("Oracle", "BAS", "Random")) %>% tidyr::pivot_wider(names_from = Method, values_from = Richness)
   wide %>% group_by(n_samples) %>% summarise(
     BAS_mean = mean(BAS), BAS_sd = sd(BAS), Random_mean = mean(Random), Random_sd = sd(Random), Oracle_mean = mean(Oracle),
     gain = mean(BAS - Random), pct_of_oracle = 100 * mean(BAS) / mean(Oracle),
