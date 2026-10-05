@@ -30,13 +30,6 @@ set.seed(42)
 # Shared helpers
 # ==============================================================================
 
-normalize01 <- function(x) {
-  if (length(x) == 0 || all(is.na(x))) return(rep(0, length(x)))
-  x[is.na(x)] <- min(x, na.rm = TRUE)
-  if (max(x) == min(x)) return(rep(0, length(x)))
-  (x - min(x)) / (max(x) - min(x))
-}
-
 # Build a data frame that tags every site with its selection step.
 # traj_list: named list with elements $n, $sampled (cumulative), $new (added this step)
 build_panel_df <- function(master_df, traj_list, step_labels,
@@ -252,7 +245,7 @@ if (requireNamespace("gganimate", quietly = TRUE) &&
 # ==============================================================================
 # SECTION B — Fig3: GlobalFungi dataset (N = 5,000)
 # Requires: master_data_GlobalFungi.rds, comm_pa_GlobalFungi.rds,
-#           comm_hel_GlobalFungi.rds  (produced by BAS_simulation_Fig3AB.R)
+#           comm_hel_GlobalFungi.rds  (included in the repository; see README "Data")
 # ==============================================================================
 message("\n=== SECTION B: Fig3 GlobalFungi Dataset ===")
 
@@ -263,7 +256,7 @@ rds_needed <- c("master_data_GlobalFungi.rds",
 if (!all(file.exists(rds_needed))) {
   message("One or more GlobalFungi RDS files not found:")
   message(paste(" ", rds_needed[!file.exists(rds_needed)], collapse = "\n"))
-  message("Run BAS_simulation_Fig3AB.R first to generate them.")
+  message("These files are part of the repository (see README \"Data\").")
   message("Skipping Section B.")
 } else {
   if (!requireNamespace("ranger", quietly = TRUE))

@@ -1,12 +1,12 @@
 # ==============================================================================
-# BAS 事前計算スクリプト（一回だけ実行）
+# 02: Precompute GlobalFungi objects (run once)
 #
-# 生成ファイル:
-#   K_GlobalFungi.rds       … tcrossprod(comm_hel) の 5000×5000 カーネル行列
-#                              (~200MB) ← comm_hel の代わりに使用
-#   comm_pa_sp_GlobalFungi.rds … sparse logical 行列 (~数MB〜数十MB)
+# Output files:
+#   K_GlobalFungi.rds          5000 x 5000 kernel matrix tcrossprod(comm_hel) (~200 MB);
+#                              not needed by the v3 scripts, kept for the LCBD comparison
+#   comm_pa_sp_GlobalFungi.rds sparse logical presence/absence matrix (a few MB)
 #
-# 実行後、BAS_WeightGridSearch_GlobalFungi_v3.R でこれらを使用。
+# comm_pa_sp_GlobalFungi.rds is read by 03, 04 and 07.
 # ==============================================================================
 
 library(Matrix)
@@ -14,50 +14,50 @@ library(Matrix)
 DATA_PATH <- getwd()   # run from the analysis/ directory
 
 # ------------------------------------------------------------------------------
-# 1. カーネル行列 K = comm_hel %*% t(comm_hel)  (5000×5000)
+# 1. Kernel matrix K = comm_hel %*% t(comm_hel)  (5000 x 5000)
 # ------------------------------------------------------------------------------
 
-message("comm_hel 読み込み中 (~2GB)...")
+message("Reading comm_hel (~2 GB) ...")
 comm_hel <- readRDS(file.path(DATA_PATH, "comm_hel_GlobalFungi.rds"))
-message("行列サイズ: ", nrow(comm_hel), " × ", ncol(comm_hel))
+message("Matrix size: ", nrow(comm_hel), " x ", ncol(comm_hel))
 
-message("K = tcrossprod(comm_hel) 計算中 ...")
+message("Computing K = tcrossprod(comm_hel) ...")
 t0 <- proc.time()
-K <- tcrossprod(comm_hel)   # 5000×5000, BLAS を使用するため通常 <2分
+K <- tcrossprod(comm_hel)   # 5000 x 5000; usually < 2 min with BLAS
 elapsed <- proc.time() - t0
-message(sprintf("  完了: %.1f秒", elapsed["elapsed"]))
-message(sprintf("  K サイズ: %.1f MB", object.size(K) / 1e6))
+message(sprintf("  done in %.1f s", elapsed["elapsed"]))
+message(sprintf("  K size: %.1f MB", object.size(K) / 1e6))
 
 k_path <- file.path(DATA_PATH, "K_GlobalFungi.rds")
-saveRDS(K, k_path, compress = FALSE)   # compress=FALSE で高速保存
-message("保存: ", k_path)
+saveRDS(K, k_path, compress = FALSE)   # uncompressed for speed
+message("Saved: ", k_path)
 
 rm(comm_hel, K); gc()
 
 # ------------------------------------------------------------------------------
-# 2. sparse comm_pa
+# 2. Sparse presence/absence matrix
 # ------------------------------------------------------------------------------
 
-message("comm_pa 読み込み中 (~250MB)...")
+message("Reading comm_pa (~250 MB) ...")
 comm_pa <- readRDS(file.path(DATA_PATH, "comm_pa_GlobalFungi.rds"))
 comm_pa <- comm_pa > 0L
 
 fill_rate <- mean(comm_pa)
-message(sprintf("  fill rate: %.4f%% (%s 非ゼロ要素)",
+message(sprintf("  fill rate: %.4f%% (%s non-zero cells)",
                 fill_rate * 100,
                 format(sum(comm_pa), big.mark = ",")))
 
-message("sparse 変換中...")
+message("Converting to sparse ...")
 comm_pa_sp <- Matrix::Matrix(comm_pa, sparse = TRUE)
-message(sprintf("  sparse サイズ: %.1f MB (dense: %.1f MB)",
+message(sprintf("  sparse size: %.1f MB (dense: %.1f MB)",
                 object.size(comm_pa_sp) / 1e6,
                 object.size(comm_pa) / 1e6))
 
 sp_path <- file.path(DATA_PATH, "comm_pa_sp_GlobalFungi.rds")
 saveRDS(comm_pa_sp, sp_path, compress = FALSE)
-message("保存: ", sp_path)
+message("Saved: ", sp_path)
 
 rm(comm_pa, comm_pa_sp); gc()
 
-message("\n=== 事前計算完了 ===")
-message("次に BAS_WeightGridSearch_GlobalFungi_v3.R を実行してください。")
+message("\n=== Precomputation finished ===")
+message("Next: 03_BAS_simulation_Fig3AB.R (and 07 for the global weight grid search).")
