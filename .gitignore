@@ -34,7 +34,6 @@ rsconnect/
 .DS_Store
 Thumbs.db
 desktop.ini
-.claude/
 
 # --- not for public release ---
 manuscript/
