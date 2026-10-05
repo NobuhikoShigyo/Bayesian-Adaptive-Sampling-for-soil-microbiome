@@ -1,5 +1,5 @@
 # ==============================================================================
-# plot_curves.R — shared figure code for Fig. 2 and Fig. 3 (v3)
+# plot_curves.R — shared figure code for Fig. 2 and Fig. 3
 #   Panel A: mean cumulative richness ± 1 SD, Oracle as dashed line
 #   Panel B: BAS vs Random across simulation runs at selected n, one-sided paired t-test
 # ==============================================================================
