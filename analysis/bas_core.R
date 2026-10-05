@@ -1,5 +1,5 @@
 # ==============================================================================
-# bas_core.R — shared engine for the BAS simulations (v3, 2026-10)
+# bas_core.R — shared engine for the BAS simulations (2026-10)
 #
 # Acquisition:  a(x) = W_rich * mu_rich(x) + W_uniq * mu_uniq(x) + W_unc * sigma(x)
 #   mu_rich : predicted richness
